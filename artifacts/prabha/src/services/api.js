@@ -284,7 +284,46 @@ export async function getChatReply(message, history = [], lang = "en", profile =
     return "I couldn't reach Yojana Mitra right now. Please try again in a minute.";
   }
 }
+export async function getSpeechAudio(text, lang = "kn") {
+  try {
+    const languageCode =
+      lang === "kn" ? "kn-IN" :
+      lang === "hi" ? "hi-IN" :
+      "en-IN";
 
+      console.log("TTS request:", {
+  text,
+  lang,
+  languageCode,
+});
+    const response = await fetch(`${API_BASE}/api/voice/tts`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text,
+        languageCode,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.details || `TTS API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.audioBase64) {
+      throw new Error("No audio returned from TTS API");
+    }
+
+    return data;
+  } catch (error) {
+    console.error("Sarvam TTS error:", error);
+    throw error;
+  }
+}
 export async function getSchemes() {
   return [
     { id: "mudra",       emoji: "💰", name: "Mudra Shishu",   benefit: "Up to ₹50,000",            docs: ["Aadhaar card", "Bank details", "Simple business plan"] },
