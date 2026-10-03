@@ -51,7 +51,7 @@ function Topbar({ t, title, onBack, lang, onLanguage }: { t: any; title: string;
   const { update } = useApp();
   return <header className="topbar">
     {onBack ? <button className="icon-button" type="button" data-testid="button-back" aria-label={t("back")} onClick={onBack}>←</button> : <span style={{ width: 56 }} />}
-    <strong className="topbar-title">{title}</strong>
+    <strong className="topbar-title"><img className="topbar-logo" src="/logo-mark.png" alt="" aria-hidden="true" />{title}</strong>
     <button className="icon-button" type="button" aria-label={t("language")} data-testid="button-language" onClick={() => { const next = lang === "en" ? "hi" : lang === "hi" ? "kn" : "en"; onLanguage(next); update({ lang: next }); }}>🌐</button>
   </header>;
 }
@@ -71,7 +71,7 @@ function Shell({ children, t, title, lang, onLanguage, onBack, nav, active, onNa
 function Splash({ t, lang, setLang, onContinue }: any) {
   const { speak } = useVoice();
   return <main className="splash dark-surface"><div className="splash-inner">
-    <div className="brand-mark">PRABHA</div><div className="brand-native">प्रभा</div><p className="tagline">{t("brandTagline")}</p><SpeakButton t={t} lang={lang} text={`${t("welcome")}. ${t("brandTagline")}`} id="splash-listen" />
+    <img className="brand-logo" src="/logo-full.png" alt="PRABHA" width="320" height="330" /><div className="brand-native">प्रभा</div><p className="tagline">{t("brandTagline")}</p><SpeakButton t={t} lang={lang} text={`${t("welcome")}. ${t("brandTagline")}`} id="splash-listen" />
     <span className="eyebrow">{t("chooseLanguage")}</span>
     <div className="language-grid">{languageOptions.map((item) => <button className={`language-pill ${lang === item.code ? "selected" : ""}`} type="button" data-testid={`button-language-${item.code}`} key={item.code} onClick={() => { setLang(item.code); speak(item.code === "hi" ? "PRABHA में आपका स्वागत है" : item.code === "kn" ? "PRABHA ಗೆ ಸ್ವಾಗತ" : "Welcome to PRABHA", item.code === "hi" ? "hi" : item.code === "kn" ? "kn" : "en"); }}>{item.label}{lang === item.code ? " ✓" : ""}</button>)}</div>
     <button className="btn btn-primary btn-wide" type="button" disabled={!lang} data-testid="button-lets-go" onClick={onContinue}>{t("letsGo")}</button>
@@ -667,7 +667,7 @@ function Main() {
       default: return <Splash t={t} lang={state.lang} setLang={setLang} onContinue={() => setScreen("role")} />;
     }
   };
-  if (!state.authReady) return <main className="screen-wrap dark-surface"><div className="content-width loading-stage"><div><div className="brand-mark">PRABHA</div><p>Loading your profile…</p></div></div></main>;
+  if (!state.authReady) return <main className="screen-wrap dark-surface"><div className="content-width loading-stage"><div><img className="brand-logo brand-logo-pulse" src="/logo-full.png" alt="PRABHA" /><p>Loading your profile…</p></div></div></main>;
   return <div className="prabha-app">{renderScreen()}{state.role === "entrepreneur" && ["home", "schemes", "mentors", "profile", "opportunity-detail"].includes(state.screen) && <button className="floating-chat bounce-chat" type="button" data-testid="button-floating-chat" aria-label={t("chatTitle")} onClick={() => setChat(true)}>📋</button>}{chat && <Chat t={t} lang={state.lang} onClose={() => setChat(false)} />}{quizOpen && <Quiz t={t} lang={state.lang} onClose={(action?: string) => { setQuizOpen(false); if (action === "esAras") setApply(t("officialPortal")); }} onResult={(score: number) => update({ readinessScore: score })} onLearning={() => { setQuizOpen(false); setScreen("learner-onboarding"); }} />}{bookingMentor && <Booking t={t} mentor={bookingMentor} me={{ name: state.user?.name, profile: state.profile }} onClose={() => setBookingMentor(null)} onBooked={(b: any) => { setBookingMentor(null); notify(b.sample ? "This is a sample mentor — requests go to real, verified mentors." : t("bookingSuccess")); }} />}{apply && <div className="modal-backdrop"><div className="modal-card"><h2>{t("applyPortal")}</h2><p>{typeof apply === "string" ? apply : t("officialPortal")}</p><div className="button-row"><button className="btn btn-outline" type="button" data-testid="button-close-apply" onClick={() => setApply(null)}>{t("later")}</button><button className="btn btn-primary" type="button" data-testid="button-open-portal" onClick={() => { setApply(null); notify(t("applyPortal")); }}>{t("officialPortal")}</button></div></div></div>}{toast && <div className="toast" role="status" data-testid="status-toast">{toast}</div>}</div>;
 }
 
