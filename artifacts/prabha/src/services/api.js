@@ -21,6 +21,7 @@ import { ref, uploadBytes } from "firebase/storage";
 import { auth, db, storage } from "../lib/firebase";
 import { domainsForProfile, skillLabels } from "../data/onboarding";
 import { buildRoadmap, rankOpportunities, whyFits } from "../data/roadmaps";
+import { SCHEMES } from "../data/schemes";
 
 export const API_BASE = (import.meta.env.VITE_API_URL || "http://localhost:8080").replace(/\/$/, "");
 
@@ -206,7 +207,8 @@ export async function getMentorsForUser(profile = {}, opts = {}) {
 
 // ─── 4. SESSION REQUESTS (entrepreneur ⇄ mentor) ─────────────────────────────
 
-export async function bookMentorSlot(mentor, { slot, mode }, me = {}) {
+export async function bookMentorSlot(mentor, { date, time, mode }, me = {}) {
+  const slot = `${date} · ${time}`;
   if (mentor.isSample) return { id: `sample-${Date.now()}`, status: "requested", sample: true };
   const uid = uidOrThrow();
   const ref_ = await addDoc(collection(db, "requests"), {
@@ -214,14 +216,28 @@ export async function bookMentorSlot(mentor, { slot, mode }, me = {}) {
     mentorName: mentor.name,
     entrepreneurId: uid,
     entrepreneurName: me.name || "",
+    entrepreneurEmail: auth.currentUser?.email || "",
     village: me.profile?.location || "",
     skills: skillLabels(me.profile).join(", "),
+    date,
+    time,
     slot,
     mode,
     status: "requested",
     createdAt: serverTimestamp(),
   });
   return { id: ref_.id, status: "requested" };
+}
+
+/** Entrepreneur: her own session requests, live. */
+export function listenMyRequests(callback) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) { callback([]); return () => {}; }
+  return onSnapshot(
+    query(collection(db, "requests"), where("entrepreneurId", "==", uid)),
+    (snap) => callback(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    () => callback([]),
+  );
 }
 
 export function listenMentorRequests(callback) {
@@ -234,8 +250,16 @@ export function listenMentorRequests(callback) {
   );
 }
 
-export async function respondToRequest(id, status) {
-  await updateDoc(doc(db, "requests", id), { status, respondedAt: serverTimestamp() });
+/** extra = { calendarEventId, calendarLink, meetLink } when a calendar event was created */
+export async function respondToRequest(id, status, extra = {}) {
+  await updateDoc(doc(db, "requests", id), { status, ...extra, respondedAt: serverTimestamp() });
+}
+
+/** Remember (per mentor) that she connected Google Calendar, so the app can auto-add events. */
+export async function setCalendarConnected(connected) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+  await setDoc(doc(db, "users", uid), { calendarConnected: Boolean(connected) }, { merge: true });
 }
 
 // ─── 5. OPPORTUNITIES + PERSONALISED ROADMAPS ────────────────────────────────
@@ -265,10 +289,6 @@ export async function submitReadiness(answers) {
   return { score: answers.reduce((s, a) => s + Number(a || 0), 0) };
 }
 
-export async function connectGoogleCalendar() {
-  return { connected: true };
-}
-
 export async function getChatReply(message, history = [], lang = "en", profile = {}) {
   try {
     const response = await fetch(`${API_BASE}/api/ai/chat`, {
@@ -286,15 +306,21 @@ export async function getChatReply(message, history = [], lang = "en", profile =
 }
 
 export async function getSchemes() {
-  return [
-    { id: "mudra",       emoji: "💰", name: "Mudra Shishu",   benefit: "Up to ₹50,000",            docs: ["Aadhaar card", "Bank details", "Simple business plan"] },
-    { id: "vishwakarma", emoji: "🛠️", name: "PM Vishwakarma", benefit: "Up to ₹3 lakh + tool kit", docs: ["Aadhaar card", "Skill proof", "Bank details"] },
-    { id: "pmegp",       emoji: "🏭", name: "PMEGP",          benefit: "Up to ₹10 lakh",           docs: ["Project report", "Identity proof", "Bank details"] },
-    { id: "pmfme",       emoji: "🥣", name: "PMFME",          benefit: "35% subsidy",              docs: ["Food business plan", "FSSAI plan", "Bank details"] },
-    { id: "udyogini",    emoji: "🌱", name: "Udyogini",       benefit: "Support for women",        docs: ["Income proof", "Address proof", "Business plan"] },
-    { id: "standup",     emoji: "🚀", name: "Stand Up India", benefit: "Loans for new ventures",   docs: ["Business plan", "Identity proof", "Bank details"] },
-    { id: "nrml",        emoji: "🤲", name: "DAY-NRLM",       benefit: "SHG enterprise support",   docs: ["SHG details", "Identity proof", "Bank details"] },
-  ];
+  return SCHEMES;
+}
+
+// ─── Scheme application tracker (users/{uid}.schemeTracker.{schemeId}) ──────
+// { stage, docsDone: [index], stepsDone: [index], refNo, appliedOn, notes, updatedAt }
+
+export async function getSchemeTracker() {
+  const data = await getUserDoc().catch(() => null);
+  return data?.schemeTracker || {};
+}
+
+export async function saveSchemeTracker(schemeId, entry) {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+  await setDoc(doc(db, "users", uid), { schemeTracker: { [schemeId]: { ...entry, updatedAt: Date.now() } } }, { merge: true });
 }
 
 export async function getLearnerCourses() {

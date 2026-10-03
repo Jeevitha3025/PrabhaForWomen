@@ -240,3 +240,39 @@ button { cursor: pointer; }
 .topbar-title { display: inline-flex; align-items: center; gap: 10px; text-align: center; }
 .topbar-logo { width: 34px; height: 34px; object-fit: contain; flex: none; }
 @media (max-width: 380px) { .topbar-logo { width: 26px; height: 26px; } }
+
+/* ── Sessions ── */
+.session-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px dashed #e6d9a3; }
+.session-row:first-of-type { border-top: 0; }
+.session-row p { margin: 4px 0 0; }
+.session-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.session-actions .btn { min-height: 44px; padding: 10px 16px; text-decoration: none; display: inline-flex; align-items: center; }
+.session-status { display: inline-flex; align-items: center; min-height: 32px; padding: 4px 12px; border-radius: 999px; font-size: .84rem; font-weight: 800; }
+.status-waiting { background: #fff3b0; color: #6b4e00; }
+.status-confirmed { background: #dcfce7; color: #166534; }
+.status-declined { background: #ffedd5; color: #7c2d12; }
+.notice-note { padding: 13px 16px; border-radius: 12px; background: #dcfce7; color: #14532d; font-weight: 700; }
+
+/* ── Scheme application tracker ── */
+.link-btn { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; text-align: center; }
+.app-row { width: 100%; background: none; border-left: 0; border-right: 0; border-bottom: 0; text-align: left; cursor: pointer; color: inherit; font: inherit; }
+.app-row:hover strong { text-decoration: underline; }
+.stage-track { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 12px; }
+.stage-step { display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 10px 12px; border: 2px solid #e6d9a3; border-radius: 14px; background: #fff; color: #4a3b00; font-weight: 800; text-align: left; cursor: pointer; }
+.stage-step span { font-size: 1.15rem; }
+.stage-step.done { border-color: #86efac; background: #f0fdf4; color: #166534; }
+.stage-step.current { border-color: #daa520; background: #fff3b0; color: #1f1a00; box-shadow: 0 0 0 3px #fde68a; }
+.stage-step.stage-no.current { border-color: #fb923c; background: #ffedd5; color: #7c2d12; box-shadow: 0 0 0 3px #fed7aa; }
+.tracker-fields { display: grid; gap: 4px; margin-top: 16px; }
+.checklist { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 2px; }
+.checklist label { display: flex; align-items: flex-start; gap: 12px; min-height: 48px; padding: 10px 4px; cursor: pointer; border-top: 1px dashed #e6d9a3; }
+.checklist li:first-child label { border-top: 0; }
+.checklist input { width: 24px; height: 24px; flex: none; margin-top: 1px; accent-color: #15803d; }
+.checklist input:checked + span { color: #166534; text-decoration: line-through; text-decoration-thickness: 1px; }
+.warn-note { background: #fff3b0; color: #6b4e00; }
+.stage-interested { background: #fef9c3; color: #6b4e00; }
+.stage-documents { background: #e0f2fe; color: #075985; }
+.stage-applied { background: #ede9fe; color: #5b21b6; }
+.stage-review { background: #e0e7ff; color: #3730a3; }
+.stage-approved { background: #dcfce7; color: #166534; }
+.stage-rejected { background: #ffedd5; color: #7c2d12; }

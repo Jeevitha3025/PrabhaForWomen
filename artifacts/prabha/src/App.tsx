@@ -9,20 +9,24 @@ import { quiz, quizQuestions } from "./data/quiz";
 // @ts-ignore JavaScript service layer has no TS types.
 import {
   bookMentorSlot,
-  connectGoogleCalendar,
   getChatReply,
   getLearnerCourses,
   getMentorsForUser,
   getOpportunities,
   getRoadmap,
   getRoadmapProgress,
+  getUserDoc,
+  getSchemeTracker,
   getSchemes,
   listenMentorRequests,
   listenMentorStatus,
+  listenMyRequests,
   loginUser,
   registerUser,
   respondToRequest,
   saveRoadmapProgress,
+  saveSchemeTracker,
+  setCalendarConnected,
   submitMentorDocuments,
   submitReadiness,
 // @ts-ignore
@@ -30,10 +34,13 @@ import {
 // @ts-ignore
 import { detectPlace } from "./services/geo";
 // @ts-ignore
+import { ESARAS_URL, SCHEMES, SCHEME_BY_ID, STAGES, STAGE_BY_ID, findScheme } from "./data/schemes";
+// @ts-ignore
+import { calendarConfigured, createSessionEvent, disconnectCalendar, getCalendarToken, preloadGoogle } from "./services/googleCalendar";
+// @ts-ignore
 import { EDUCATION, EDUCATION_FOLLOWUP, FAMILY, FAMILY_FOLLOWUP, HOURS, NOTHING_YET, RESOURCES, SKILLS, resourceLabels, resourcesForSkills, skillLabels } from "./data/onboarding";
 import "./index.css";
 
-const schemesFallback: any[] = [];
 const languageOptions = languages as { code: string; label: string; short: string }[];
 
 function SpeakButton({ text, t, lang, id = "listen" }: { text: string; t: (key: string, vars?: any) => string; lang: string; id?: string }) {
@@ -411,28 +418,159 @@ function OpportunityDetail({ t, lang, opportunity, profile, onBack, onQuiz, onCh
       </> : <p className="muted">Finding a mentor for you…</p>}
     </div>
 
-    <div className="section card scheme-card"><h2>📋 {opportunity.scheme}</h2><span className="tag">{t("indicative")}</span><h3>{t("checklist")}</h3><ul className="list">{["Aadhaar card", "Bank details", "Simple business plan"].map((item) => <li key={item}>☐ {item}</li>)}</ul><button className="btn btn-primary btn-wide" type="button" data-testid="button-apply-detail" onClick={onApply}>{t("apply")}</button></div>
+    <div className="section card scheme-card"><h2>📋 {opportunity.scheme}</h2><span className="tag">{t("indicative")}</span><h3>{t("checklist")}</h3><ul className="list">{(findScheme(opportunity.scheme)?.docs || ["Aadhaar card", "Bank details", "Simple business plan"]).slice(0, 4).map((item: string) => <li key={item}>☐ {item}</li>)}</ul><button className="btn btn-primary btn-wide" type="button" data-testid="button-apply-detail" onClick={onApply}>{t("apply")}</button></div>
     <div className="section card"><div className="section-heading"><h2>📊 {t("readiness")}</h2><SpeakButton t={t} lang={lang} text={t("readiness")} /></div><p className="muted">{t("readinessHint")}</p><button className="btn btn-secondary btn-wide" type="button" data-testid="button-start-quiz-detail" onClick={onQuiz}>{t("startQuizCaps")}</button></div>
     <div className="section hero-card"><p>🛒 {t("esarasBanner")}</p></div>
   </Shell>;
 }
 
-function Home({ t, lang, profile, score, onOpportunity, onQuiz, onChat, onNavigate }: any) {
+function Home({ t, lang, profile, score, sessions = [], onOpportunity, onQuiz, onChat, onNavigate }: any) {
   const name = profile.name || "friend";
-  return <Shell t={t} title={t("home")} lang={lang} onLanguage={() => undefined} nav active="home" onNavigate={onNavigate}><div className="hero-card"><span className="eyebrow">{t("readyToBegin")}</span><h1>{t("hello", { name })}</h1><p>{t("nextStepText")}</p><button className="btn btn-primary" type="button" style={{ marginTop: 18 }} data-testid="button-ask-prabha" onClick={onChat}>🎤 {t("askPrabha")}</button></div><div className="section card tint-card"><div className="section-heading"><h2>{t("yourOpportunities")}</h2><span>🌾</span></div><p className="muted">{t("opportunityFinderHint")}</p><button className="btn btn-secondary btn-wide" type="button" data-testid="button-opportunity-finder" onClick={onOpportunity}>{t("opportunityFinder")} →</button></div><div className="section card"><div className="score-layout"><div className="score-ring">{score ?? "—"}</div><div><h2 style={{ margin: 0 }}>{t("readiness")}</h2><p className="muted">{t("readinessHint")}</p></div></div><button className="btn btn-outline btn-wide" type="button" data-testid="button-start-quiz-home" onClick={onQuiz}>{t("startQuiz")}</button></div><div className="section card"><span className="eyebrow">{t("nextStep")}</span><p>{t("nextStepText")}</p></div></Shell>;
+  return <Shell t={t} title={t("home")} lang={lang} onLanguage={() => undefined} nav active="home" onNavigate={onNavigate}><div className="hero-card"><span className="eyebrow">{t("readyToBegin")}</span><h1>{t("hello", { name })}</h1><p>{t("nextStepText")}</p><button className="btn btn-primary" type="button" style={{ marginTop: 18 }} data-testid="button-ask-prabha" onClick={onChat}>🎤 {t("askPrabha")}</button></div><MySessions sessions={sessions} compact /><div className="section card tint-card"><div className="section-heading"><h2>{t("yourOpportunities")}</h2><span>🌾</span></div><p className="muted">{t("opportunityFinderHint")}</p><button className="btn btn-secondary btn-wide" type="button" data-testid="button-opportunity-finder" onClick={onOpportunity}>{t("opportunityFinder")} →</button></div><div className="section card"><div className="score-layout"><div className="score-ring">{score ?? "—"}</div><div><h2 style={{ margin: 0 }}>{t("readiness")}</h2><p className="muted">{t("readinessHint")}</p></div></div><button className="btn btn-outline btn-wide" type="button" data-testid="button-start-quiz-home" onClick={onQuiz}>{t("startQuiz")}</button></div><div className="section card"><span className="eyebrow">{t("nextStep")}</span><p>{t("nextStepText")}</p></div></Shell>;
 }
 
-function Schemes({ t, lang, onNavigate, onChat, onBack, onApply }: any) {
-  const [items, setItems] = useState<any[]>(schemesFallback);
-  useEffect(() => { getSchemes().then(setItems); }, []);
-  return <Shell t={t} title={t("schemes")} lang={lang} onLanguage={() => undefined} onBack={onBack} nav active="schemes" onNavigate={onNavigate}><p className="muted">{t("schemesHint")}</p><button className="btn btn-secondary btn-wide" type="button" data-testid="button-ask-yojana" onClick={onChat}>📋 {t("askYojana")}</button><div className="section" style={{ display: "grid", gap: 12 }}>{items.map((scheme) => <div className="card scheme-card" key={scheme.id} data-testid={`card-scheme-${scheme.id}`}><h2>{scheme.emoji} {scheme.name}</h2><p className="benefit">{scheme.benefit}</p><span className="tag">{t("indicative")}</span><p className="muted small">{t("documents")}: {scheme.docs.join(" · ")}</p><button className="btn btn-primary" type="button" data-testid={`button-apply-${scheme.id}`} onClick={() => onApply(scheme)}>{t("apply")}</button></div>)}</div></Shell>;
+// ─── Schemes: official portals + personal application tracker ────────────────
+const MODE_LABEL: Record<string, string> = { online: "🌐 Apply online", "online-or-bank": "🌐 Online or at a bank", offline: "🏢 Apply at an office" };
+const daysSince = (ts?: number) => (ts ? Math.floor((Date.now() - ts) / 86400000) : 0);
+
+function StageChip({ stage }: { stage?: string }) {
+  const s = stage && STAGE_BY_ID[stage];
+  if (!s) return null;
+  return <span className={`session-status stage-${s.id}`}>{s.emoji} {s.label}</span>;
 }
 
-function MentorList({ t, lang, profile, onNavigate, onBack, onSelect }: any) {
+function Schemes({ t, lang, onNavigate, onChat, onBack, onOpen }: any) {
+  const [items, setItems] = useState<any[]>(SCHEMES);
+  const [tracker, setTracker] = useState<any>({});
+  useEffect(() => { getSchemes().then(setItems); getSchemeTracker().then(setTracker).catch(() => undefined); }, []);
+  const mine = items.filter((s) => tracker[s.id]?.stage);
+  return <Shell t={t} title={t("schemes")} lang={lang} onLanguage={() => undefined} onBack={onBack} nav active="schemes" onNavigate={onNavigate}>
+    <p className="muted">{t("schemesHint")}</p>
+    <button className="btn btn-secondary btn-wide" type="button" data-testid="button-ask-yojana" onClick={onChat}>📋 {t("askYojana")}</button>
+
+    {mine.length > 0 && <div className="section card session-card" data-testid="card-my-applications">
+      <div className="section-heading"><h2>My applications</h2><span>📂</span></div>
+      {mine.map((s) => {
+        const e = tracker[s.id];
+        const stale = ["applied", "review"].includes(e.stage) && daysSince(e.appliedOn) >= 14;
+        return <button className="session-row app-row" type="button" key={s.id} onClick={() => onOpen(s.id)} data-testid={`row-application-${s.id}`}>
+          <div><strong>{s.emoji} {s.name}</strong>
+            <p className="muted small">{e.refNo ? `Ref: ${e.refNo}` : `${(e.docsDone || []).length}/${s.docs.length} documents ready`}{stale ? " · time to check status" : ""}</p></div>
+          <StageChip stage={e.stage} />
+        </button>;
+      })}
+    </div>}
+
+    <div className="section" style={{ display: "grid", gap: 12 }}>{items.map((scheme) => <div className="card scheme-card" key={scheme.id} data-testid={`card-scheme-${scheme.id}`}>
+      <div className="section-heading"><h2>{scheme.emoji} {scheme.name}</h2><StageChip stage={tracker[scheme.id]?.stage} /></div>
+      <p className="benefit">{scheme.benefit}</p>
+      <p className="small" style={{ marginTop: 0 }}>👩🏽 {scheme.who}</p>
+      <span className="tag">{MODE_LABEL[scheme.mode]}</span>
+      <p className="muted small">{t("documents")}: {scheme.docs.slice(0, 3).join(" · ")}{scheme.docs.length > 3 ? ` +${scheme.docs.length - 3} more` : ""}</p>
+      <div className="button-row">
+        <button className="btn btn-primary" type="button" data-testid={`button-track-${scheme.id}`} onClick={() => onOpen(scheme.id)}>{tracker[scheme.id]?.stage ? "Continue →" : "Steps & tracker"}</button>
+        <a className="btn btn-outline link-btn" href={scheme.applyUrl} target="_blank" rel="noopener noreferrer" data-testid={`link-portal-${scheme.id}`}>Official portal ↗</a>
+      </div>
+    </div>)}</div>
+  </Shell>;
+}
+
+function SchemeDetail({ t, lang, schemeId, onNavigate, onBack, onChat }: any) {
+  const scheme = SCHEME_BY_ID[schemeId];
+  const [entry, setEntry] = useState<any>({ stage: "", docsDone: [], stepsDone: [], refNo: "", appliedOn: 0, notes: "" });
+  const [loaded, setLoaded] = useState(false);
+  const [saved, setSaved] = useState<"" | "saving" | "saved">("");
+  const [backFromPortal, setBackFromPortal] = useState(false);
+  const timer = useRef<number | undefined>(undefined);
+
+  useEffect(() => { getSchemeTracker().then((all: any) => { if (all[schemeId]) setEntry((e: any) => ({ ...e, ...all[schemeId] })); }).finally(() => setLoaded(true)); }, [schemeId]);
+
+  const change = (patch: any) => {
+    setEntry((cur: any) => {
+      const next = { ...cur, ...patch };
+      if (patch.stage === "applied" && !cur.appliedOn) next.appliedOn = Date.now();
+      if (!next.stage && (patch.docsDone || patch.stepsDone)) next.stage = "documents";
+      window.clearTimeout(timer.current);
+      setSaved("saving");
+      timer.current = window.setTimeout(() => saveSchemeTracker(schemeId, next).then(() => setSaved("saved")).catch(() => setSaved("")), 600);
+      return next;
+    });
+  };
+  const toggle = (key: "docsDone" | "stepsDone", i: number) => change({ [key]: entry[key].includes(i) ? entry[key].filter((x: number) => x !== i) : [...entry[key], i] });
+  const openedPortal = () => { setBackFromPortal(true); if (!entry.stage) change({ stage: "interested" }); };
+
+  if (!scheme) return null;
+  const stageIdx = STAGES.findIndex((s: any) => s.id === entry.stage);
+  const appliedOrLater = stageIdx >= 2;
+  const days = daysSince(entry.appliedOn);
+  const docsPct = Math.round((entry.docsDone.length / scheme.docs.length) * 100);
+
+  return <Shell t={t} title={`${scheme.emoji} ${scheme.name}`} lang={lang} onLanguage={() => undefined} onBack={onBack} nav active="schemes" onNavigate={onNavigate}>
+    <div className="card tint-card">
+      <p className="benefit" style={{ marginTop: 0 }}>{scheme.benefit}</p>
+      <p className="small">👩🏽 {scheme.who}</p>
+      <span className="tag">{MODE_LABEL[scheme.mode]}</span>
+      <div className="button-row" style={{ marginTop: 14 }}>
+        <a className="btn btn-primary link-btn" href={scheme.applyUrl} target="_blank" rel="noopener noreferrer" onClick={openedPortal} data-testid="link-apply-portal">{scheme.applyLabel} ↗</a>
+        {scheme.infoUrl !== scheme.applyUrl && <a className="btn btn-outline link-btn" href={scheme.infoUrl} target="_blank" rel="noopener noreferrer">Scheme details ↗</a>}
+      </div>
+      {scheme.note && <p className="field-hint" style={{ marginTop: 10 }}>ℹ️ {scheme.note}</p>}
+    </div>
+
+    {backFromPortal && <div className="section notice-note" role="status">Back from the portal? Update your progress below — it's saved automatically.</div>}
+    {appliedOrLater && ["applied", "review"].includes(entry.stage) && days >= 14 && <div className="section notice-note warn-note">It's been {days} days since you applied. {scheme.statusUrl ? "Check your status on the portal" : "Visit the office to ask about your application"}{entry.refNo ? ` using reference ${entry.refNo}` : ""}.</div>}
+
+    <div className="section card">
+      <div className="section-heading"><h2>Where are you now?</h2>{loaded && saved && <span className="field-hint">{saved === "saving" ? "Saving…" : "Saved ✓"}</span>}</div>
+      <div className="stage-track" role="radiogroup" aria-label="Application stage">
+        {STAGES.map((s: any, i: number) => <button key={s.id} type="button" role="radio" aria-checked={entry.stage === s.id}
+          className={`stage-step ${entry.stage === s.id ? "current" : stageIdx > i && s.id !== "rejected" && entry.stage !== "rejected" ? "done" : ""} ${s.id === "rejected" ? "stage-no" : ""}`}
+          data-testid={`stage-${s.id}`} onClick={() => change({ stage: s.id })}><span>{s.emoji}</span>{s.label}</button>)}
+      </div>
+      {appliedOrLater && <div className="tracker-fields">
+        <div className="field"><label htmlFor="refno">Application / reference number</label>
+          <input id="refno" value={entry.refNo} placeholder="Shown after you submit" onChange={(e) => change({ refNo: e.target.value })} data-testid="input-refno" /></div>
+        <div className="field"><label htmlFor="applied-on">Applied on</label>
+          <input id="applied-on" type="date" max={new Date().toISOString().slice(0, 10)} value={entry.appliedOn ? new Date(entry.appliedOn).toISOString().slice(0, 10) : ""}
+            onChange={(e) => change({ appliedOn: e.target.value ? new Date(`${e.target.value}T12:00:00`).getTime() : 0 })} data-testid="input-applied-on" /></div>
+        {scheme.statusUrl && <a className="btn btn-outline link-btn btn-wide" href={scheme.statusUrl} target="_blank" rel="noopener noreferrer">🔎 Check status on the portal ↗</a>}
+      </div>}
+      {entry.stage === "approved" && <p className="benefit">Congratulations! 🎉 Book a mentor session to plan how to use the money well.</p>}
+      {entry.stage === "rejected" && <p className="small">Don't lose heart. Ask Yojana Mitra about other schemes, or talk to a mentor about what to fix and reapply.</p>}
+    </div>
+
+    <div className="section card">
+      <div className="section-heading"><h2>Documents ({entry.docsDone.length}/{scheme.docs.length})</h2><span>📂</span></div>
+      <div className="progress-bar" aria-label={`${docsPct}% of documents ready`}><span style={{ width: `${docsPct}%` }} /></div>
+      <ul className="checklist">{scheme.docs.map((d: string, i: number) => <li key={d}><label><input type="checkbox" checked={entry.docsDone.includes(i)} onChange={() => toggle("docsDone", i)} data-testid={`doc-${i}`} /> <span>{d}</span></label></li>)}</ul>
+    </div>
+
+    <div className="section card">
+      <div className="section-heading"><h2>How to apply</h2><SpeakButton t={t} lang={lang} text={scheme.steps.map((s: string, i: number) => `${i + 1}. ${s}`).join(". ")} id="scheme-steps-listen" /></div>
+      <ol className="roadmap">{scheme.steps.map((s: string, i: number) => {
+        const done = entry.stepsDone.includes(i);
+        const next = !done && entry.stepsDone.length === i;
+        return <li key={i} className={`roadmap-step ${done ? "done" : next ? "next" : ""}`}>
+          <button type="button" className="roadmap-check" aria-pressed={done} aria-label={done ? `Mark step ${i + 1} not done` : `Mark step ${i + 1} done`} onClick={() => toggle("stepsDone", i)} data-testid={`step-${i}`}>{done ? "✓" : i + 1}</button>
+          <div><strong>{s}</strong></div>
+        </li>;
+      })}</ol>
+    </div>
+
+    <div className="section card">
+      <div className="field" style={{ marginTop: 0 }}><label htmlFor="notes">My notes</label>
+        <textarea id="notes" value={entry.notes} placeholder="Bank branch, officer's name, what they said…" onChange={(e) => change({ notes: e.target.value })} data-testid="input-scheme-notes" /></div>
+      <button className="btn btn-secondary btn-wide" type="button" onClick={onChat}>📋 Ask Yojana Mitra about {scheme.name}</button>
+    </div>
+  </Shell>;
+}
+
+function MentorList({ t, lang, profile, sessions = [], onNavigate, onBack, onSelect }: any) {
   const [mentors, setMentors] = useState<any[] | null>(null);
   useEffect(() => { getMentorsForUser(profile, { lang }).then(setMentors); }, [profile, lang]);
   return <Shell t={t} title={t("mentors")} lang={lang} onLanguage={() => undefined} onBack={onBack} nav active="mentors" onNavigate={onNavigate}>
-    <p className="muted">{t("mentorHint")}</p>
+    <MySessions sessions={sessions} />
+    <p className="muted section">{t("mentorHint")}</p>
     {mentors?.[0]?.isSample && <p className="field-hint">These are sample mentors. Verified mentors appear here once approved.</p>}
     <div className="section" style={{ display: "grid", gap: 12 }}>
       {mentors === null && <p className="muted">Matching mentors to your skills…</p>}
@@ -454,7 +592,7 @@ function Booking({ t, mentor, me, onClose, onBooked }: any) {
   const [mode, setMode] = useState(modes[0] || "Phone"); const [slot, setSlot] = useState(mentor.slots[0]); const [date, setDate] = useState(today); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
   const submit = async () => {
     setBusy(true); setError("");
-    try { const booking = await bookMentorSlot(mentor, { slot: `${date} · ${slot}`, mode }, me); onBooked(booking); }
+    try { const booking = await bookMentorSlot(mentor, { date, time: slot, mode }, me); onBooked(booking); }
     catch (e: any) { setError(e?.message || "Could not send the request. Try again."); }
     finally { setBusy(false); }
   };
@@ -570,16 +708,120 @@ function MentorPendingPreview({ t, user }: any) {
   );
 }
 
+// ─── Sessions (shared helpers) ────────────────────────────────────────────────
+const sessionTime = (r: any) => {
+  const m = String(r.date ? `${r.date} ${r.time}` : r.slot || "").match(/(\d{4}-\d{2}-\d{2}).*?(\d{1,2}:\d{2})/);
+  return m ? new Date(`${m[1]}T${m[2].padStart(5, "0")}:00`).getTime() : 0;
+};
+const byTime = (a: any, b: any) => sessionTime(a) - sessionTime(b);
+const isPast = (r: any) => { const ts = sessionTime(r); return ts > 0 && ts + 3600000 < Date.now(); };
+const prettySlot = (r: any) => {
+  const m = String(r.date ? `${r.date} ${r.time}` : r.slot || "").match(/(\d{4}-\d{2}-\d{2}).*?(\d{1,2}:\d{2})/);
+  if (!m) return r.slot || "";
+  const d = new Date(`${m[1]}T${m[2].padStart(5, "0")}:00`);
+  return `${d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })} · ${d.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}`;
+};
+/** Link that opens Google Calendar with the event pre-filled (no sign-in needed in the app). */
+function addToCalendarUrl(r: any, title: string) {
+  const m = String(r.date ? `${r.date} ${r.time}` : r.slot || "").match(/(\d{4})-(\d{2})-(\d{2}).*?(\d{1,2}):(\d{2})/);
+  if (!m) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const start = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  const end = new Date(start.getTime() + 30 * 60000);
+  const fmt = (d: Date) => `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+  const q = new URLSearchParams({ action: "TEMPLATE", text: title, dates: `${fmt(start)}/${fmt(end)}`, ctz: "Asia/Kolkata", details: `Mentoring session on PRABHA (${r.mode}).` });
+  return `https://calendar.google.com/calendar/render?${q}`;
+}
+
+const STATUS_LABEL: Record<string, [string, string]> = {
+  requested: ["⏳ Waiting for mentor", "status-waiting"],
+  accepted: ["✅ Confirmed", "status-confirmed"],
+  declined: ["Not available", "status-declined"],
+};
+
+/** Entrepreneur's view of her sessions. */
+function MySessions({ sessions, compact = false }: { sessions: any[]; compact?: boolean }) {
+  const list = [...sessions].filter((r) => !isPast(r)).sort(byTime);
+  if (!list.length) return null;
+  const shown = compact ? list.filter((r) => r.status !== "declined").slice(0, 1) : list;
+  if (!shown.length) return null;
+  return <div className="section card session-card" data-testid="card-my-sessions">
+    <div className="section-heading"><h2>{compact ? "Your next session" : "My sessions"}</h2><span>📅</span></div>
+    {shown.map((r) => {
+      const [label, cls] = STATUS_LABEL[r.status] || [r.status, ""];
+      return <div className="session-row" key={r.id} data-testid={`session-${r.id}`}>
+        <div>
+          <strong>{prettySlot(r)}</strong>
+          <p className="muted small">with {r.mentorName} · {r.mode}</p>
+          {r.status === "accepted" && r.calendarEventId && <p className="small">📧 Calendar invite sent to your email</p>}
+          {r.status === "declined" && <p className="small">Please book another time or another mentor.</p>}
+        </div>
+        <div className="session-actions">
+          <span className={`session-status ${cls}`}>{label}</span>
+          {r.status === "accepted" && r.meetLink && <a className="btn btn-primary" href={r.meetLink} target="_blank" rel="noreferrer">📹 Join</a>}
+          {r.status === "accepted" && !r.calendarEventId && <a className="btn btn-outline" href={addToCalendarUrl(r, `PRABHA session with ${r.mentorName}`)} target="_blank" rel="noreferrer">📅 Add to calendar</a>}
+        </div>
+      </div>;
+    })}
+  </div>;
+}
+
 function MentorHome({ t, lang, user, onNavigate, onBack, initialTab = "mentor-home" }: any) {
   const [tab, setTab] = useState(initialTab);
   const [requests, setRequests] = useState<any[]>([]);
   const [status, setStatus] = useState<string | null>(null);
-  const [calendar, setCalendar] = useState(false);
+  const [calConnected, setCalConnected] = useState(false);
+  const [busyId, setBusyId] = useState("");
+  const [note, setNote] = useState("");
   // Live: flips the moment an admin edits mentors/{uid}.verificationStatus in the console.
   useEffect(() => listenMentorStatus(setStatus), []);
   useEffect(() => (status === "approved" ? listenMentorRequests(setRequests) : undefined), [status]);
   useEffect(() => setTab(initialTab), [initialTab]);
-  const respond = (id: string, next: string) => respondToRequest(id, next).catch(() => undefined);
+  useEffect(() => {
+    preloadGoogle().catch(() => undefined);
+    getUserDoc().then((d: any) => setCalConnected(Boolean(d?.calendarConnected))).catch(() => undefined);
+  }, []);
+
+  const connect = () => {
+    setNote("");
+    getCalendarToken(true) // called directly in the click so the Google popup isn't blocked
+      .then(() => { setCalConnected(true); setCalendarConnected(true); setNote("Google Calendar connected. Accepted sessions will be added automatically."); })
+      .catch((e: any) => setNote(e.message));
+  };
+  const disconnect = () => { disconnectCalendar(); setCalConnected(false); setCalendarConnected(false); setNote("Google Calendar disconnected."); };
+
+  /** Accept (optionally with a calendar event) or just add an event to an already accepted session. */
+  const respond = (r: any, next: "accepted" | "declined") => {
+    setNote("");
+    const tokenPromise = next === "accepted" && calConnected && calendarConfigured() ? getCalendarToken(false) : null;
+    setBusyId(r.id);
+    (async () => {
+      let extra = {};
+      let msg = next === "accepted" ? `Accepted. ${r.entrepreneurName || "The entrepreneur"} can see it in the app.` : "Declined.";
+      if (tokenPromise) {
+        try {
+          extra = await createSessionEvent(await tokenPromise, r);
+          msg = r.entrepreneurEmail ? `Accepted and added to your Google Calendar. An invite was emailed to ${r.entrepreneurName}.` : "Accepted and added to your Google Calendar.";
+        } catch (e: any) { msg = `Accepted, but the calendar event failed: ${e.message}`; }
+      }
+      try { await respondToRequest(r.id, next, extra); } catch (e: any) { msg = `Could not update: ${e.message}`; }
+      setNote(msg); setBusyId("");
+    })();
+  };
+  const addEvent = (r: any) => {
+    setNote("");
+    const tokenPromise = getCalendarToken(!calConnected);
+    setBusyId(r.id);
+    (async () => {
+      try {
+        const extra = await createSessionEvent(await tokenPromise, r);
+        await respondToRequest(r.id, "accepted", extra);
+        if (!calConnected) { setCalConnected(true); setCalendarConnected(true); }
+        setNote("Added to your Google Calendar.");
+      } catch (e: any) { setNote(e.message); }
+      setBusyId("");
+    })();
+  };
 
   if (status === null) return <Shell t={t} title={t("mentor")} lang={lang} onLanguage={() => undefined} onBack={onBack}><p className="muted">Checking your status…</p></Shell>;
 
@@ -599,27 +841,63 @@ function MentorHome({ t, lang, user, onNavigate, onBack, initialTab = "mentor-ho
     {status === "pending" && <MentorPendingPreview t={t} user={user} />}
   </Shell>;
 
-  const open = requests.filter((r) => r.status === "requested");
-  const accepted = requests.filter((r) => r.status === "accepted");
+  const open = requests.filter((r) => r.status === "requested").sort(byTime);
+  const accepted = requests.filter((r) => r.status === "accepted").sort(byTime);
+  const upcoming = accepted.filter((r) => !isPast(r));
+  const calendarCard = calendarConfigured()
+    ? <div className="card">{calConnected
+        ? <div className="section-heading"><p className="benefit" style={{ margin: 0 }}>{t("calendarConnected")}</p><button className="btn btn-outline" type="button" data-testid="button-disconnect-calendar" onClick={disconnect}>Disconnect</button></div>
+        : <><button className="btn btn-primary btn-wide" type="button" data-testid="button-connect-calendar" onClick={connect}>📅 {t("calendarConnect")}</button>
+            <p className="field-hint" style={{ marginTop: 8 }}>Accepted sessions go straight into your calendar, and the entrepreneur gets an email invite.</p></>}
+      </div>
+    : <div className="card"><p className="muted">Google Calendar isn't set up on this site yet.</p></div>;
+
   return <Shell t={t} title={t(tab === "mentor-home" ? "mentorRequests" : tab)} lang={lang} onLanguage={() => undefined} nav active={tab} onNavigate={(next: string) => { setTab(next); onNavigate(next); }} role="mentor">
-    <div className="card tint-card"><span className="eyebrow">{t("mentor")} ✓</span><h2>{t("hello", { name: user.name })}</h2><p>{t("readyToBegin")}</p></div>
+    <div className="card tint-card"><span className="eyebrow">{t("mentor")} ✓</span><h2>{t("hello", { name: user.name })}</h2><p>{open.length ? `You have ${open.length} new request${open.length > 1 ? "s" : ""}.` : t("readyToBegin")}</p></div>
+    {note && <div className="section notice-note" role="status">{note}</div>}
+
     {tab === "mentor-home" && <div className="section" style={{ display: "grid", gap: 12 }}>
+      {!calConnected && calendarConfigured() && open.length > 0 && <div className="card"><p className="small" style={{ marginTop: 0 }}>Tip: connect Google Calendar so accepted sessions are added automatically.</p><button className="btn btn-outline" type="button" onClick={connect}>📅 {t("calendarConnect")}</button></div>}
       {open.length === 0 && <div className="card empty"><span className="emoji">📥</span><p>No new requests yet. Entrepreneurs whose skills match yours will see you first.</p></div>}
       {open.map((r) => <div className="card" key={r.id} data-testid={`card-request-${r.id}`}>
         <h2>👩🏽 {r.entrepreneurName || "Entrepreneur"}</h2>
         <p className="muted">{[r.village, r.skills, r.mode].filter(Boolean).join(" · ")}</p>
-        <p className="small">📅 {r.slot}</p>
+        <p className="small">📅 {prettySlot(r)}</p>
         <div className="button-row">
-          <button className="btn btn-primary" type="button" data-testid={`button-accept-${r.id}`} onClick={() => respond(r.id, "accepted")}>{t("accept")}</button>
-          <button className="btn btn-outline" type="button" data-testid={`button-decline-${r.id}`} onClick={() => respond(r.id, "declined")}>{t("decline")}</button>
+          <button className="btn btn-primary" type="button" disabled={busyId === r.id} data-testid={`button-accept-${r.id}`} onClick={() => respond(r, "accepted")}>{busyId === r.id ? "…" : t("accept")}</button>
+          <button className="btn btn-outline" type="button" disabled={busyId === r.id} data-testid={`button-decline-${r.id}`} onClick={() => respond(r, "declined")}>{t("decline")}</button>
         </div>
       </div>)}
     </div>}
+
     {tab === "mentees" && <div className="section" style={{ display: "grid", gap: 12 }}>
       {accepted.length === 0 ? <div className="card empty"><span className="emoji">💬</span><p>{t("mentorHint")}</p></div>
-        : accepted.map((r) => <div className="card" key={r.id}><h2>👩🏽 {r.entrepreneurName}</h2><p className="muted">{[r.village, r.skills].filter(Boolean).join(" · ")}</p><p className="small">📅 {r.slot} · {r.mode}</p></div>)}
+        : accepted.map((r) => <div className="card" key={r.id}>
+            <h2>👩🏽 {r.entrepreneurName}</h2>
+            <p className="muted">{[r.village, r.skills].filter(Boolean).join(" · ")}</p>
+            <p className="small">📅 {prettySlot(r)} · {r.mode}{isPast(r) ? " · done" : ""}</p>
+            {r.entrepreneurEmail && <p className="small">✉️ <a href={`mailto:${r.entrepreneurEmail}`}>{r.entrepreneurEmail}</a></p>}
+            <div className="button-row">
+              {r.meetLink && <a className="btn btn-primary" href={r.meetLink} target="_blank" rel="noreferrer">📹 Join Meet</a>}
+              {r.calendarLink ? <a className="btn btn-outline" href={r.calendarLink} target="_blank" rel="noreferrer">Open in Calendar</a>
+                : !isPast(r) && calendarConfigured() && <button className="btn btn-outline" type="button" disabled={busyId === r.id} onClick={() => addEvent(r)}>📅 Add to Google Calendar</button>}
+            </div>
+          </div>)}
     </div>}
-    {tab === "calendar" && <div className="section"><div className="card">{calendar ? <p className="benefit">{t("calendarConnected")}</p> : <button className="btn btn-primary btn-wide" type="button" data-testid="button-connect-calendar" onClick={() => connectGoogleCalendar().then(() => setCalendar(true))}>📅 {t("calendarConnect")}</button>}</div><div className="card section"><h2>{t("upcoming")}</h2>{accepted.length ? accepted.map((r) => <p key={r.id}>📅 {r.slot} — {r.entrepreneurName} ({r.mode})</p>) : <p className="muted">{t("emptyBookings")}</p>}</div></div>}
+
+    {tab === "calendar" && <div className="section" style={{ display: "grid", gap: 12 }}>
+      {calendarCard}
+      <div className="card"><h2>{t("upcoming")}</h2>
+        {upcoming.length ? upcoming.map((r) => <div className="session-row" key={r.id}>
+          <div><strong>{prettySlot(r)}</strong><p className="muted small">{r.entrepreneurName} · {r.mode}</p></div>
+          <div className="session-actions">
+            {r.meetLink && <a className="btn btn-primary" href={r.meetLink} target="_blank" rel="noreferrer">📹 Join</a>}
+            {r.calendarLink ? <span className="session-status status-confirmed">In Google Calendar</span>
+              : calendarConfigured() && <button className="btn btn-outline" type="button" disabled={busyId === r.id} onClick={() => addEvent(r)}>📅 Add</button>}
+          </div>
+        </div>) : <p className="muted">{t("emptyBookings")}</p>}
+      </div>
+    </div>}
   </Shell>;
 }
 
@@ -641,11 +919,28 @@ function Profile({ t, lang, user, profile, role, onLanguage, onLogout, onBack, o
 }
 
 function Main() {
-  const { state, update, logout } = useApp(); const t = useMemo(() => makeTranslator(state.lang), [state.lang]); const [chat, setChat] = useState(false); const [quizOpen, setQuizOpen] = useState(false); const [apply, setApply] = useState<any>(null); const [bookingMentor, setBookingMentor] = useState<any>(null); const [toast, setToast] = useState("");
+  const { state, update, logout } = useApp(); const t = useMemo(() => makeTranslator(state.lang), [state.lang]); const [chat, setChat] = useState(false); const [quizOpen, setQuizOpen] = useState(false); const [bookingMentor, setBookingMentor] = useState<any>(null); const [toast, setToast] = useState("");
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [schemeId, setSchemeId] = useState("");
+  const openScheme = (id: string) => { setSchemeId(id); update({ screen: "scheme-detail" }); };
   const setScreen = (screen: string) => update({ screen });
   const setLang = (lang: string) => update({ lang });
-  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 3200); };
+  const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 4500); };
   const nav = (screen: string) => setScreen(screen);
+  // Entrepreneur: live session updates + a one-time toast when a mentor answers.
+  useEffect(() => {
+    if (state.role !== "entrepreneur" || !state.user?.id) { setSessions([]); return undefined; }
+    return listenMyRequests((list: any[]) => {
+      setSessions(list);
+      for (const r of list) {
+        if (r.status === "requested") continue;
+        const key = `prabha-seen-${r.id}`;
+        if (localStorage.getItem(key) === r.status) continue;
+        localStorage.setItem(key, r.status);
+        notify(r.status === "accepted" ? `✅ ${r.mentorName} confirmed your session on ${prettySlot(r)}` : `${r.mentorName} can't make ${prettySlot(r)}. Please pick another time.`);
+      }
+    });
+  }, [state.role, state.user?.id]);
   const handleHome = () => setScreen(homeFor(state.role, state.profile));
   const onboardingFor = (role: string) => (role === "mentor" ? "mentor-onboarding" : role === "learner" ? "learner-onboarding" : "entrepreneur-onboarding");
   const renderScreen = () => {
@@ -655,10 +950,11 @@ function Main() {
       case "login": return <Login t={t} lang={state.lang} role={state.role} onBack={() => setScreen("role")} onDone={({ user, profile, isNew }: any) => update({ user, role: user.role, profile, screen: isNew ? onboardingFor(user.role) : homeFor(user.role, profile) })} />;
       case "entrepreneur-onboarding": return <EntrepreneurOnboarding t={t} lang={state.lang} profile={state.profile} onBack={() => (state.profile?.skills?.length ? handleHome() : setScreen("login"))} onDone={(profile: any) => update({ profile, screen: "opportunity-finder" })} />;
       case "opportunity-finder": return <OpportunityFinder t={t} lang={state.lang} profile={state.profile} onBack={() => setScreen("home")} onOpen={(opportunity: any) => update({ opportunity, screen: "opportunity-detail" })} />;
-      case "opportunity-detail": return state.opportunity ? <OpportunityDetail t={t} lang={state.lang} opportunity={state.opportunity} profile={state.profile} onBack={() => setScreen("opportunity-finder")} onQuiz={() => setQuizOpen(true)} onChat={() => setChat(true)} onBook={(mentor: any) => setBookingMentor(mentor)} onApply={() => setApply(state.opportunity.scheme)} /> : null;
-      case "home": return <Home t={t} lang={state.lang} profile={{ ...state.user, ...state.profile }} score={state.readinessScore} onOpportunity={() => setScreen("opportunity-finder")} onQuiz={() => setQuizOpen(true)} onChat={() => setChat(true)} onNavigate={nav} />;
-      case "schemes": return <Schemes t={t} lang={state.lang} onNavigate={nav} onBack={handleHome} onChat={() => setChat(true)} onApply={setApply} />;
-      case "mentors": return <MentorList t={t} lang={state.lang} profile={state.profile} onNavigate={nav} onBack={handleHome} onSelect={setBookingMentor} />;
+      case "opportunity-detail": return state.opportunity ? <OpportunityDetail t={t} lang={state.lang} opportunity={state.opportunity} profile={state.profile} onBack={() => setScreen("opportunity-finder")} onQuiz={() => setQuizOpen(true)} onChat={() => setChat(true)} onBook={(mentor: any) => setBookingMentor(mentor)} onApply={() => { const sc = findScheme(state.opportunity.scheme); if (sc) openScheme(sc.id); else setScreen("schemes"); }} /> : null;
+      case "home": return <Home t={t} lang={state.lang} sessions={sessions} profile={{ ...state.user, ...state.profile }} score={state.readinessScore} onOpportunity={() => setScreen("opportunity-finder")} onQuiz={() => setQuizOpen(true)} onChat={() => setChat(true)} onNavigate={nav} />;
+      case "schemes": return <Schemes t={t} lang={state.lang} onNavigate={nav} onBack={handleHome} onChat={() => setChat(true)} onOpen={openScheme} />;
+      case "scheme-detail": return <SchemeDetail t={t} lang={state.lang} schemeId={schemeId} onNavigate={nav} onBack={() => setScreen("schemes")} onChat={() => setChat(true)} />;
+      case "mentors": return <MentorList t={t} lang={state.lang} profile={state.profile} sessions={sessions} onNavigate={nav} onBack={handleHome} onSelect={setBookingMentor} />;
       case "profile": return <Profile t={t} lang={state.lang} user={state.user} profile={state.profile} role={state.role} onLanguage={setLang} onLogout={logout} onBack={handleHome} onEdit={() => setScreen("entrepreneur-onboarding")} />;
       case "mentor-onboarding": return <MentorOnboarding t={t} lang={state.lang} user={state.user} onBack={() => setScreen("mentor-home")} onDone={(result: any) => { notify(result.emailSent ? "Submitted! We've emailed you a confirmation." : "Submitted! We'll review your documents soon."); setScreen("mentor-home"); }} />;
       case "mentor-home": case "mentees": case "calendar": return <MentorHome t={t} lang={state.lang} user={state.user} initialTab={state.screen} onNavigate={nav} onBack={(screen = "login") => (typeof screen === "string" ? setScreen(screen) : setScreen("login"))} />;
@@ -668,7 +964,7 @@ function Main() {
     }
   };
   if (!state.authReady) return <main className="screen-wrap dark-surface"><div className="content-width loading-stage"><div><img className="brand-logo brand-logo-pulse" src="/logo-full.png" alt="PRABHA" /><p>Loading your profile…</p></div></div></main>;
-  return <div className="prabha-app">{renderScreen()}{state.role === "entrepreneur" && ["home", "schemes", "mentors", "profile", "opportunity-detail"].includes(state.screen) && <button className="floating-chat bounce-chat" type="button" data-testid="button-floating-chat" aria-label={t("chatTitle")} onClick={() => setChat(true)}>📋</button>}{chat && <Chat t={t} lang={state.lang} onClose={() => setChat(false)} />}{quizOpen && <Quiz t={t} lang={state.lang} onClose={(action?: string) => { setQuizOpen(false); if (action === "esAras") setApply(t("officialPortal")); }} onResult={(score: number) => update({ readinessScore: score })} onLearning={() => { setQuizOpen(false); setScreen("learner-onboarding"); }} />}{bookingMentor && <Booking t={t} mentor={bookingMentor} me={{ name: state.user?.name, profile: state.profile }} onClose={() => setBookingMentor(null)} onBooked={(b: any) => { setBookingMentor(null); notify(b.sample ? "This is a sample mentor — requests go to real, verified mentors." : t("bookingSuccess")); }} />}{apply && <div className="modal-backdrop"><div className="modal-card"><h2>{t("applyPortal")}</h2><p>{typeof apply === "string" ? apply : t("officialPortal")}</p><div className="button-row"><button className="btn btn-outline" type="button" data-testid="button-close-apply" onClick={() => setApply(null)}>{t("later")}</button><button className="btn btn-primary" type="button" data-testid="button-open-portal" onClick={() => { setApply(null); notify(t("applyPortal")); }}>{t("officialPortal")}</button></div></div></div>}{toast && <div className="toast" role="status" data-testid="status-toast">{toast}</div>}</div>;
+  return <div className="prabha-app">{renderScreen()}{state.role === "entrepreneur" && ["home", "schemes", "scheme-detail", "mentors", "profile", "opportunity-detail"].includes(state.screen) && <button className="floating-chat bounce-chat" type="button" data-testid="button-floating-chat" aria-label={t("chatTitle")} onClick={() => setChat(true)}>📋</button>}{chat && <Chat t={t} lang={state.lang} onClose={() => setChat(false)} />}{quizOpen && <Quiz t={t} lang={state.lang} onClose={(action?: string) => { setQuizOpen(false); if (action === "esAras") window.open(ESARAS_URL, "_blank", "noopener,noreferrer"); }} onResult={(score: number) => update({ readinessScore: score })} onLearning={() => { setQuizOpen(false); setScreen("learner-onboarding"); }} />}{bookingMentor && <Booking t={t} mentor={bookingMentor} me={{ name: state.user?.name, profile: state.profile }} onClose={() => setBookingMentor(null)} onBooked={(b: any) => { setBookingMentor(null); notify(b.sample ? "This is a sample mentor — requests go to real, verified mentors." : "Request sent! You'll see it under My sessions once the mentor confirms."); }} />}{toast && <div className="toast" role="status" data-testid="status-toast">{toast}</div>}</div>;
 }
 
 export default function App() {
