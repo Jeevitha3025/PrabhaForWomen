@@ -188,6 +188,8 @@ export function resourceLabels(profile = {}) {
 /** Domains (matching the mentor onboarding list) an entrepreneur needs help in. */
 export function domainsForProfile(profile = {}) {
   const domains = (profile.skills || []).map((id) => SKILL_BY_ID[id]?.domain).filter(Boolean);
+  // Learners: match mentors to the skill they want to learn.
+  if (profile.learning?.dreamDomain) domains.push(profile.learning.dreamDomain);
   // Everyone starting out benefits from money/scheme help.
   domains.push("Finance");
   return [...new Set(domains)];

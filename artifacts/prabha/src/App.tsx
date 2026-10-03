@@ -34,6 +34,10 @@ import {
 // @ts-ignore
 import { detectPlace } from "./services/geo";
 // @ts-ignore
+import { FREE_TRAINING, LESSON_INDEX, MODULE_BY_ID, buildPath, nextLesson, weeklyGoal } from "./data/learning";
+// @ts-ignore
+import { doneThisWeek, getLearningProgress, saveLessonDone } from "./services/learning";
+// @ts-ignore
 import { ESARAS_URL, SCHEMES, SCHEME_BY_ID, STAGES, STAGE_BY_ID, findScheme } from "./data/schemes";
 // @ts-ignore
 import { calendarConfigured, createSessionEvent, disconnectCalendar, getCalendarToken, preloadGoogle } from "./services/googleCalendar";
@@ -424,9 +428,9 @@ function OpportunityDetail({ t, lang, opportunity, profile, onBack, onQuiz, onCh
   </Shell>;
 }
 
-function Home({ t, lang, profile, score, sessions = [], onOpportunity, onQuiz, onChat, onNavigate }: any) {
+function Home({ t, lang, profile, score, sessions = [], onOpportunity, onQuiz, onChat, onNavigate, onLearn }: any) {
   const name = profile.name || "friend";
-  return <Shell t={t} title={t("home")} lang={lang} onLanguage={() => undefined} nav active="home" onNavigate={onNavigate}><div className="hero-card"><span className="eyebrow">{t("readyToBegin")}</span><h1>{t("hello", { name })}</h1><p>{t("nextStepText")}</p><button className="btn btn-primary" type="button" style={{ marginTop: 18 }} data-testid="button-ask-prabha" onClick={onChat}>🎤 {t("askPrabha")}</button></div><MySessions sessions={sessions} compact /><div className="section card tint-card"><div className="section-heading"><h2>{t("yourOpportunities")}</h2><span>🌾</span></div><p className="muted">{t("opportunityFinderHint")}</p><button className="btn btn-secondary btn-wide" type="button" data-testid="button-opportunity-finder" onClick={onOpportunity}>{t("opportunityFinder")} →</button></div><div className="section card"><div className="score-layout"><div className="score-ring">{score ?? "—"}</div><div><h2 style={{ margin: 0 }}>{t("readiness")}</h2><p className="muted">{t("readinessHint")}</p></div></div><button className="btn btn-outline btn-wide" type="button" data-testid="button-start-quiz-home" onClick={onQuiz}>{t("startQuiz")}</button></div><div className="section card"><span className="eyebrow">{t("nextStep")}</span><p>{t("nextStepText")}</p></div></Shell>;
+  return <Shell t={t} title={t("home")} lang={lang} onLanguage={() => undefined} nav active="home" onNavigate={onNavigate}><div className="hero-card"><span className="eyebrow">{t("readyToBegin")}</span><h1>{t("hello", { name })}</h1><p>{t("nextStepText")}</p><button className="btn btn-primary" type="button" style={{ marginTop: 18 }} data-testid="button-ask-prabha" onClick={onChat}>🎤 {t("askPrabha")}</button></div><MySessions sessions={sessions} compact /><div className="section card tint-card"><div className="section-heading"><h2>{t("yourOpportunities")}</h2><span>🌾</span></div><p className="muted">{t("opportunityFinderHint")}</p><button className="btn btn-secondary btn-wide" type="button" data-testid="button-opportunity-finder" onClick={onOpportunity}>{t("opportunityFinder")} →</button></div><div className="section card"><div className="score-layout"><div className="score-ring">{score ?? "—"}</div><div><h2 style={{ margin: 0 }}>{t("readiness")}</h2><p className="muted">{t("readinessHint")}</p></div></div><button className="btn btn-outline btn-wide" type="button" data-testid="button-start-quiz-home" onClick={onQuiz}>{t("startQuiz")}</button></div><div className="section card"><div className="section-heading"><h2>📚 Learn the basics</h2></div><p className="muted">5-minute lessons on pricing, customers, UPI and loans — with a quick check after each.</p><button className="btn btn-outline btn-wide" type="button" data-testid="button-learn-home" onClick={onLearn}>Start learning →</button></div></Shell>;
 }
 
 // ─── Schemes: official portals + personal application tracker ────────────────
@@ -901,16 +905,148 @@ function MentorHome({ t, lang, user, onNavigate, onBack, initialTab = "mentor-ho
   </Shell>;
 }
 
-function LearnerOnboarding({ t, lang, onBack, onDone }: any) {
-  const [step, setStep] = useState(1); const [form, setForm] = useState<Record<string, string>>({}); const choose = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }));
-  const lists = step === 1 ? [["homemaker", "🏠"], ["student", "📚"], ["dailyWage", "🌾"], ["employed", "💼"]] : step === 2 ? [["Food", "🍲"], ["Textiles", "🧵"], ["Digital", "📱"], ["Agri", "🌿"], ["Beauty", "💅"], ["Craft", "🏺"]] : step === 3 ? [["<5 hrs", "⏳"], ["5–10 hrs", "🕰️"], ["10+ hrs", "🌞"]] : [["video", "📹"], ["audio", "🎧"], ["reading", "📖"], ["live", "👩🏽‍🏫"]];
-  const title = step === 1 ? "currentSituation" : step === 2 ? "dreamDomain" : step === 3 ? "hours" : "learningStyle";
-  return <div className="screen-wrap"><div className="content-width"><Topbar t={t} title={t("learnerOnboarding")} lang={lang} onLanguage={() => undefined} onBack={onBack} /><div className="progress-dots">{[1, 2, 3, 4].map((item) => <span key={item} className={`progress-dot ${item < step ? "done" : item === step ? "active" : ""}`} />)}</div><div className="card"><div className="section-heading"><h2>{t(title)}</h2><SpeakButton t={t} lang={lang} text={t(title)} /></div><div className="choice-grid">{lists.map(([value, icon]) => <button className={`choice-card ${form[title] === value ? "selected" : ""}`} type="button" key={value} data-testid={`choice-learner-${value}`} onClick={() => choose(title, value)}>{icon} {t(value) || value}</button>)}</div><button className="btn btn-primary btn-wide" type="button" data-testid="button-learner-next" onClick={() => step < 4 ? setStep(step + 1) : onDone(form)}>{step === 4 ? t("learningPath") : t("next")}</button></div></div></div>;
+function LearnerOnboarding({ t, lang, initial = {}, onBack, onDone }: any) {
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState<Record<string, string>>({ ...initial });
+  const choose = (key: string, value: string) => setForm((current) => ({ ...current, [key]: value }));
+  const steps: [string, [string, string][]][] = [
+    ["currentSituation", [["homemaker", "🏠"], ["student", "📚"], ["dailyWage", "🌾"], ["employed", "💼"]]],
+    ["dreamDomain", [["Food", "🍲"], ["Textiles", "🧵"], ["Digital", "📱"], ["Agri", "🌿"], ["Beauty", "💅"], ["Craft", "🏺"]]],
+    ["hours", [["<5 hrs", "⏳"], ["5–10 hrs", "🕰️"], ["10+ hrs", "🌞"]]],
+    ["learningStyle", [["audio", "🎧"], ["reading", "📖"], ["video", "📹"], ["live", "👩🏽‍🏫"]]],
+  ];
+  const [title, lists] = steps[step - 1];
+  const back = () => (step > 1 ? setStep(step - 1) : onBack());
+  return <div className="screen-wrap"><div className="content-width"><Topbar t={t} title={t("learnerOnboarding")} lang={lang} onLanguage={() => undefined} onBack={back} />
+    <div className="progress-dots">{[1, 2, 3, 4].map((item) => <span key={item} className={`progress-dot ${item < step ? "done" : item === step ? "active" : ""}`} />)}</div>
+    <p className="muted">{t("step", { n: step, total: 4 })}</p>
+    <div className="card"><div className="section-heading"><h2>{t(title)}</h2><SpeakButton t={t} lang={lang} text={t(title)} /></div>
+      <div className="choice-grid">{lists.map(([value, icon]) => <button className={`choice-card ${form[title] === value ? "selected" : ""}`} type="button" key={value} aria-pressed={form[title] === value} data-testid={`choice-learner-${value}`} onClick={() => choose(title, value)}>{icon} {t(value)}</button>)}</div>
+      {step === 4 && (form.learningStyle === "video" || form.learningStyle === "live") && <p className="field-hint" style={{ marginTop: 10 }}>Lessons here are short and can be read aloud. We'll also point you to free in-person training near you.</p>}
+      <button className="btn btn-primary btn-wide" style={{ marginTop: 18 }} type="button" disabled={!form[title]} data-testid="button-learner-next" onClick={() => (step < 4 ? setStep(step + 1) : onDone(form))}>{step === 4 ? t("learningPath") : t("next")}</button>
+    </div>
+  </div></div>;
 }
 
-function LearningPath({ t, lang, onBack, onNavigate }: any) {
-  const [courses, setCourses] = useState<any[]>([]); useEffect(() => { getLearnerCourses().then(setCourses); }, []);
-  return <Shell t={t} title={t("learningPath")} lang={lang} onLanguage={() => undefined} onBack={onBack} nav active="home" onNavigate={onNavigate} role="learner"><div className="hero-card"><span className="eyebrow">{t("learner")}</span><h1>{t("learningPath")}</h1><p>{t("readyToBegin")}</p></div><div className="section course-grid">{courses.map((course) => <div className="card course-card" key={course.title}><span className="course-emoji">{course.emoji}</span><div><h2 style={{ margin: 0 }}>{course.title}</h2><p className="muted">{t("minutes", { n: course.duration })}</p></div><button className="btn btn-primary" type="button" data-testid={`button-start-course-${course.title}`} onClick={() => undefined}>{t("start")}</button></div>)}</div></Shell>;
+// ─── Learning path (learner home) ────────────────────────────────────────────
+function LearningPath({ t, lang, learning = {}, onBack, onNavigate, onOpenModule, onOpenLesson, onEditPrefs, onQuiz }: any) {
+  const [progress, setProgress] = useState<any>(null);
+  useEffect(() => { getLearningProgress().then(setProgress).catch(() => setProgress({ done: {}, quiz: {} })); }, []);
+  const path = useMemo(() => buildPath(learning), [learning]);
+  if (!progress) return <Shell t={t} title={t("learningPath")} lang={lang} onLanguage={() => undefined} onBack={onBack}><p className="muted">Loading your lessons…</p></Shell>;
+
+  const done = progress.done;
+  const total = path.reduce((n: number, m: any) => n + m.lessons.length, 0);
+  const finished = path.reduce((n: number, m: any) => n + m.lessons.filter((l: any) => done[l.id]).length, 0);
+  const pct = Math.round((finished / total) * 100);
+  const next = nextLesson(path, done);
+  const goal = weeklyGoal(learning.hours);
+  const week = doneThisWeek(done);
+  const modulesDone = path.filter((m: any) => m.lessons.every((l: any) => done[l.id]));
+
+  return <Shell t={t} title={t("learningPath")} lang={lang} onLanguage={() => undefined} onBack={onBack} nav active="home" onNavigate={onNavigate}>
+    <div className="hero-card learn-hero">
+      <div className="learn-ring" style={{ ["--pct" as any]: `${pct * 3.6}deg` }} aria-label={`${pct}% complete`}><span>{pct}%</span></div>
+      <div>
+        <span className="eyebrow">{t("learner")} · {finished}/{total} lessons</span>
+        <h1 style={{ fontSize: "clamp(1.6rem, 6vw, 2.3rem)" }}>{next ? "Keep going!" : "Path complete 🎉"}</h1>
+        <p>{next ? `Next: ${next.lesson.title}` : "You've finished every lesson on your path."}</p>
+      </div>
+    </div>
+    {next && <button className="btn btn-primary btn-wide section" type="button" data-testid="button-continue-learning" onClick={() => onOpenLesson(next.module.id, next.lesson.id)}>▶ {finished ? "Continue" : "Start"}: {next.lesson.title}</button>}
+
+    <div className="section card">
+      <div className="section-heading"><h2>This week</h2><span className="field-hint">{week}/{goal} lessons</span></div>
+      <div className="progress-bar" aria-label={`${week} of ${goal} lessons this week`}><span style={{ width: `${Math.min(100, (week / goal) * 100)}%` }} /></div>
+      <p className="small" style={{ marginBottom: 0 }}>{week >= goal ? "🌟 Weekly goal reached! Well done." : `Goal based on the ${learning.hours || "time"} you can give each week. Each lesson takes about 5 minutes.`}</p>
+    </div>
+
+    {modulesDone.length > 0 && <div className="section card"><h2 style={{ marginTop: 0 }}>Badges</h2>
+      <div className="badge-row">{modulesDone.map((m: any) => <span className="learn-badge" key={m.id} title={`${m.title} complete`}>{m.emoji}<small>{m.title}</small></span>)}</div></div>}
+
+    <div className="section course-grid">{path.map((m: any) => {
+      const n = m.lessons.filter((l: any) => done[l.id]).length;
+      return <button className="card course-card module-card" type="button" key={m.id} data-testid={`module-${m.id}`} onClick={() => onOpenModule(m.id)}>
+        <span className="course-emoji">{m.emoji}</span>
+        <div style={{ flex: 1, textAlign: "left" }}>
+          <h2 style={{ margin: 0 }}>{m.title}</h2>
+          <p className="muted small" style={{ margin: "4px 0 8px" }}>{n}/{m.lessons.length} lessons · ~{m.lessons.length * 5} min</p>
+          <div className="progress-bar"><span style={{ width: `${(n / m.lessons.length) * 100}%` }} /></div>
+        </div>
+        <span aria-hidden="true">{n === m.lessons.length ? "✅" : "›"}</span>
+      </button>;
+    })}</div>
+
+    {modulesDone.length >= 2 && <div className="section card tint-card"><h2 style={{ marginTop: 0 }}>Ready to start your business?</h2>
+      <p>Check how ready you are, or talk to a mentor who has done it.</p>
+      <div className="button-row"><button className="btn btn-primary" type="button" onClick={onQuiz}>📊 {t("readiness")}</button><button className="btn btn-outline" type="button" onClick={() => onNavigate("mentors")}>🤝 {t("mentors")}</button></div></div>}
+
+    <div className="section card"><h2 style={{ marginTop: 0 }}>Free training near you</h2>
+      {FREE_TRAINING.map((f: any) => <div className="session-row" key={f.title}><div><strong>{f.emoji} {f.title}</strong><p className="muted small">{f.detail}</p></div>
+        {f.url && <a className="btn btn-outline link-btn" href={f.url} target="_blank" rel="noopener noreferrer">Open ↗</a>}</div>)}
+    </div>
+    <button className="btn btn-outline btn-wide section" type="button" onClick={onEditPrefs}>Change my learning preferences</button>
+  </Shell>;
+}
+
+function LearningModule({ t, lang, moduleId, onBack, onOpenLesson, onNavigate }: any) {
+  const m = MODULE_BY_ID[moduleId];
+  const [done, setDone] = useState<any>({});
+  useEffect(() => { getLearningProgress().then((p: any) => setDone(p.done)).catch(() => undefined); }, [moduleId]);
+  if (!m) return null;
+  return <Shell t={t} title={`${m.emoji} ${m.title}`} lang={lang} onLanguage={() => undefined} onBack={onBack} nav active="home" onNavigate={onNavigate}>
+    <ol className="roadmap card">{m.lessons.map((l: any, i: number) => {
+      const isDone = Boolean(done[l.id]);
+      const isNext = !isDone && m.lessons.slice(0, i).every((x: any) => done[x.id]);
+      return <li key={l.id} className={`roadmap-step ${isDone ? "done" : isNext ? "next" : ""}`}>
+        <span className="roadmap-check" aria-hidden="true">{isDone ? "✓" : i + 1}</span>
+        <button type="button" className="lesson-link" data-testid={`lesson-${l.id}`} onClick={() => onOpenLesson(m.id, l.id)}><strong>{l.title}</strong><span className="muted small">~5 min · {isDone ? "Done — tap to review" : "Tap to start"}</span></button>
+      </li>;
+    })}</ol>
+  </Shell>;
+}
+
+function LessonView({ t, lang, moduleId, lessonId, prefersAudio, onBack, onFinished }: any) {
+  const m = MODULE_BY_ID[moduleId];
+  const entry = LESSON_INDEX[lessonId];
+  const lesson = entry?.lesson;
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [saving, setSaving] = useState(false);
+  const { speak } = useVoice();
+  const readAloud = () => speak(`${lesson.title}. ${lesson.points.join(" ")} Try this today: ${lesson.task}`, "en");
+  useEffect(() => { setAnswers({}); if (prefersAudio && lesson) window.setTimeout(readAloud, 400); }, [lessonId]);
+  if (!m || !lesson) return null;
+
+  const allAnswered = lesson.quiz.every((_: any, i: number) => answers[i] !== undefined);
+  const correct = lesson.quiz.filter((q: any, i: number) => answers[i] === q.answer).length;
+  const nextL = m.lessons[entry.index + 1];
+  const finish = async () => {
+    setSaving(true);
+    try { await saveLessonDone(lesson.id, correct); } catch { /* offline: still let her continue */ }
+    setSaving(false);
+    onFinished(nextL ? { moduleId: m.id, lessonId: nextL.id } : null);
+  };
+
+  return <Shell t={t} title={`${m.emoji} ${m.title}`} lang={lang} onLanguage={() => undefined} onBack={onBack}>
+    <p className="muted small">Lesson {entry.index + 1} of {m.lessons.length}</p>
+    <div className="card">
+      <div className="section-heading"><h2 style={{ margin: 0 }}>{lesson.title}</h2><button className="icon-button" type="button" aria-label="Read this lesson aloud" data-testid="button-lesson-listen" onClick={readAloud}>🔊</button></div>
+      <ul className="lesson-points">{lesson.points.map((p: string) => <li key={p}>{p}</li>)}</ul>
+    </div>
+    <div className="section card tint-card"><h3 style={{ marginTop: 0 }}>✍️ Try this today</h3><p style={{ marginBottom: 0 }}>{lesson.task}</p></div>
+    <div className="section card"><h3 style={{ marginTop: 0 }}>Quick check</h3>
+      {lesson.quiz.map((q: any, qi: number) => <div key={qi} className="field" role="radiogroup" aria-label={q.q}>
+        <label>{q.q}</label>
+        <div className="choice-grid">{q.options.map((o: string, oi: number) => {
+          const picked = answers[qi] === oi;
+          const state = answers[qi] === undefined ? "" : oi === q.answer ? "quiz-right" : picked ? "quiz-wrong" : "";
+          return <button key={o} type="button" role="radio" aria-checked={picked} className={`choice-card ${picked ? "selected" : ""} ${state}`} disabled={answers[qi] !== undefined} data-testid={`quiz-${qi}-${oi}`} onClick={() => setAnswers((a) => ({ ...a, [qi]: oi }))}>{o}</button>;
+        })}</div>
+        {answers[qi] !== undefined && <p className="small" aria-live="polite">{answers[qi] === q.answer ? "✅ Correct!" : `Not quite — the answer is: ${q.options[q.answer]}`}</p>}
+      </div>)}
+    </div>
+    <button className="btn btn-primary btn-wide section" type="button" disabled={!allAnswered || saving} data-testid="button-lesson-done" onClick={finish}>{saving ? "Saving…" : nextL ? "Done — next lesson →" : "Finish module ✓"}</button>
+  </Shell>;
 }
 
 function Profile({ t, lang, user, profile, role, onLanguage, onLogout, onBack, onEdit }: any) {
@@ -926,7 +1062,11 @@ function Main() {
   const setScreen = (screen: string) => update({ screen });
   const setLang = (lang: string) => update({ lang });
   const notify = (message: string) => { setToast(message); window.setTimeout(() => setToast(""), 4500); };
-  const nav = (screen: string) => setScreen(screen);
+  const nav = (screen: string) => setScreen(screen === "home" && state.role === "learner" ? "learning-path" : screen);
+  const [learnIds, setLearnIds] = useState<{ moduleId: string; lessonId: string }>({ moduleId: "", lessonId: "" });
+  const openModule = (moduleId: string) => { setLearnIds({ moduleId, lessonId: "" }); setScreen("learn-module"); };
+  const openLesson = (moduleId: string, lessonId: string) => { setLearnIds({ moduleId, lessonId }); setScreen("learn-lesson"); };
+  const goLearn = () => setScreen(state.profile?.learning ? "learning-path" : "learner-onboarding");
   // Entrepreneur: live session updates + a one-time toast when a mentor answers.
   useEffect(() => {
     if (state.role !== "entrepreneur" || !state.user?.id) { setSessions([]); return undefined; }
@@ -951,20 +1091,22 @@ function Main() {
       case "entrepreneur-onboarding": return <EntrepreneurOnboarding t={t} lang={state.lang} profile={state.profile} onBack={() => (state.profile?.skills?.length ? handleHome() : setScreen("login"))} onDone={(profile: any) => update({ profile, screen: "opportunity-finder" })} />;
       case "opportunity-finder": return <OpportunityFinder t={t} lang={state.lang} profile={state.profile} onBack={() => setScreen("home")} onOpen={(opportunity: any) => update({ opportunity, screen: "opportunity-detail" })} />;
       case "opportunity-detail": return state.opportunity ? <OpportunityDetail t={t} lang={state.lang} opportunity={state.opportunity} profile={state.profile} onBack={() => setScreen("opportunity-finder")} onQuiz={() => setQuizOpen(true)} onChat={() => setChat(true)} onBook={(mentor: any) => setBookingMentor(mentor)} onApply={() => { const sc = findScheme(state.opportunity.scheme); if (sc) openScheme(sc.id); else setScreen("schemes"); }} /> : null;
-      case "home": return <Home t={t} lang={state.lang} sessions={sessions} profile={{ ...state.user, ...state.profile }} score={state.readinessScore} onOpportunity={() => setScreen("opportunity-finder")} onQuiz={() => setQuizOpen(true)} onChat={() => setChat(true)} onNavigate={nav} />;
+      case "home": return <Home t={t} lang={state.lang} sessions={sessions} onLearn={goLearn} profile={{ ...state.user, ...state.profile }} score={state.readinessScore} onOpportunity={() => setScreen("opportunity-finder")} onQuiz={() => setQuizOpen(true)} onChat={() => setChat(true)} onNavigate={nav} />;
       case "schemes": return <Schemes t={t} lang={state.lang} onNavigate={nav} onBack={handleHome} onChat={() => setChat(true)} onOpen={openScheme} />;
       case "scheme-detail": return <SchemeDetail t={t} lang={state.lang} schemeId={schemeId} onNavigate={nav} onBack={() => setScreen("schemes")} onChat={() => setChat(true)} />;
       case "mentors": return <MentorList t={t} lang={state.lang} profile={state.profile} sessions={sessions} onNavigate={nav} onBack={handleHome} onSelect={setBookingMentor} />;
       case "profile": return <Profile t={t} lang={state.lang} user={state.user} profile={state.profile} role={state.role} onLanguage={setLang} onLogout={logout} onBack={handleHome} onEdit={() => setScreen("entrepreneur-onboarding")} />;
       case "mentor-onboarding": return <MentorOnboarding t={t} lang={state.lang} user={state.user} onBack={() => setScreen("mentor-home")} onDone={(result: any) => { notify(result.emailSent ? "Submitted! We've emailed you a confirmation." : "Submitted! We'll review your documents soon."); setScreen("mentor-home"); }} />;
       case "mentor-home": case "mentees": case "calendar": return <MentorHome t={t} lang={state.lang} user={state.user} initialTab={state.screen} onNavigate={nav} onBack={(screen = "login") => (typeof screen === "string" ? setScreen(screen) : setScreen("login"))} />;
-      case "learner-onboarding": return <LearnerOnboarding t={t} lang={state.lang} onBack={() => setScreen("login")} onDone={(learning: any) => update({ profile: { ...state.profile, learning }, screen: "learning-path" })} />;
-      case "learning-path": return <LearningPath t={t} lang={state.lang} onBack={() => setScreen("login")} onNavigate={nav} />;
+      case "learner-onboarding": return <LearnerOnboarding t={t} lang={state.lang} initial={state.profile?.learning} onBack={() => (state.profile?.learning ? setScreen("learning-path") : state.role === "learner" ? setScreen("login") : handleHome())} onDone={(learning: any) => update({ profile: { ...state.profile, learning }, screen: "learning-path" })} />;
+      case "learning-path": return <LearningPath t={t} lang={state.lang} learning={state.profile?.learning} onBack={state.role === "learner" ? undefined : handleHome} onNavigate={nav} onOpenModule={openModule} onOpenLesson={openLesson} onEditPrefs={() => setScreen("learner-onboarding")} onQuiz={() => setQuizOpen(true)} />;
+      case "learn-module": return <LearningModule t={t} lang={state.lang} moduleId={learnIds.moduleId} onBack={() => setScreen("learning-path")} onOpenLesson={openLesson} onNavigate={nav} />;
+      case "learn-lesson": return <LessonView t={t} lang={state.lang} moduleId={learnIds.moduleId} lessonId={learnIds.lessonId} prefersAudio={state.profile?.learning?.learningStyle === "audio"} onBack={() => setScreen("learn-module")} onFinished={(next: any) => { if (next) openLesson(next.moduleId, next.lessonId); else { notify("Module complete! 🎉 You earned a badge."); setScreen("learning-path"); } }} />;
       default: return <Splash t={t} lang={state.lang} setLang={setLang} onContinue={() => setScreen("role")} />;
     }
   };
   if (!state.authReady) return <main className="screen-wrap dark-surface"><div className="content-width loading-stage"><div><img className="brand-logo brand-logo-pulse" src="/logo-full.png" alt="PRABHA" /><p>Loading your profile…</p></div></div></main>;
-  return <div className="prabha-app">{renderScreen()}{state.role === "entrepreneur" && ["home", "schemes", "scheme-detail", "mentors", "profile", "opportunity-detail"].includes(state.screen) && <button className="floating-chat bounce-chat" type="button" data-testid="button-floating-chat" aria-label={t("chatTitle")} onClick={() => setChat(true)}>📋</button>}{chat && <Chat t={t} lang={state.lang} onClose={() => setChat(false)} />}{quizOpen && <Quiz t={t} lang={state.lang} onClose={(action?: string) => { setQuizOpen(false); if (action === "esAras") window.open(ESARAS_URL, "_blank", "noopener,noreferrer"); }} onResult={(score: number) => update({ readinessScore: score })} onLearning={() => { setQuizOpen(false); setScreen("learner-onboarding"); }} />}{bookingMentor && <Booking t={t} mentor={bookingMentor} me={{ name: state.user?.name, profile: state.profile }} onClose={() => setBookingMentor(null)} onBooked={(b: any) => { setBookingMentor(null); notify(b.sample ? "This is a sample mentor — requests go to real, verified mentors." : "Request sent! You'll see it under My sessions once the mentor confirms."); }} />}{toast && <div className="toast" role="status" data-testid="status-toast">{toast}</div>}</div>;
+  return <div className="prabha-app">{renderScreen()}{state.role === "entrepreneur" && ["home", "schemes", "scheme-detail", "mentors", "profile", "opportunity-detail"].includes(state.screen) && <button className="floating-chat bounce-chat" type="button" data-testid="button-floating-chat" aria-label={t("chatTitle")} onClick={() => setChat(true)}>📋</button>}{chat && <Chat t={t} lang={state.lang} onClose={() => setChat(false)} />}{quizOpen && <Quiz t={t} lang={state.lang} onClose={(action?: string) => { setQuizOpen(false); if (action === "esAras") window.open(ESARAS_URL, "_blank", "noopener,noreferrer"); }} onResult={(score: number) => update({ readinessScore: score })} onLearning={() => { setQuizOpen(false); goLearn(); }} />}{bookingMentor && <Booking t={t} mentor={bookingMentor} me={{ name: state.user?.name, profile: state.profile }} onClose={() => setBookingMentor(null)} onBooked={(b: any) => { setBookingMentor(null); notify(b.sample ? "This is a sample mentor — requests go to real, verified mentors." : "Request sent! You'll see it under My sessions once the mentor confirms."); }} />}{toast && <div className="toast" role="status" data-testid="status-toast">{toast}</div>}</div>;
 }
 
 export default function App() {

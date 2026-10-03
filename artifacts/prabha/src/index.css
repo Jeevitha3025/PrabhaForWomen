@@ -276,3 +276,20 @@ button { cursor: pointer; }
 .stage-review { background: #e0e7ff; color: #3730a3; }
 .stage-approved { background: #dcfce7; color: #166534; }
 .stage-rejected { background: #ffedd5; color: #7c2d12; }
+
+/* ── Learner ── */
+.learn-hero { display: flex; align-items: center; gap: 18px; }
+.learn-ring { --pct: 0deg; flex: none; display: grid; place-items: center; width: 88px; height: 88px; border-radius: 50%; background: conic-gradient(#ffda03 var(--pct), rgba(255,255,255,.18) 0); }
+.learn-ring span { display: grid; place-items: center; width: 70px; height: 70px; border-radius: 50%; background: #2b2100; color: #fff; font-weight: 900; font-size: 1.15rem; }
+.module-card { width: 100%; border: 1px solid #f3e3a0; cursor: pointer; font: inherit; color: inherit; }
+.module-card:hover { border-color: #daa520; }
+.badge-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.learn-badge { display: grid; justify-items: center; gap: 4px; min-width: 84px; padding: 10px; border-radius: 16px; background: #fff3b0; font-size: 1.8rem; }
+.learn-badge small { font-size: .72rem; font-weight: 800; color: #6b4e00; text-align: center; }
+.lesson-link { display: grid; gap: 4px; width: 100%; padding: 0; border: 0; background: none; text-align: left; color: inherit; font: inherit; cursor: pointer; }
+.lesson-link:hover strong { text-decoration: underline; }
+.lesson-points { margin: 14px 0 0; padding-left: 20px; display: grid; gap: 12px; font-size: 1.05rem; line-height: 1.55; }
+.choice-card.quiz-right { border-color: #15803d; background: #dcfce7; color: #14532d; }
+.choice-card.quiz-wrong { border-color: #fb923c; background: #ffedd5; color: #7c2d12; }
+.choice-card:disabled { cursor: default; opacity: 1; }
+.learn-hero .eyebrow { color: #fde992; }
