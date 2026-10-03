@@ -231,3 +231,12 @@ button { cursor: pointer; }
 .roadmap-step.done .roadmap-check { background: #15803d; border-color: #15803d; }
 .roadmap-step.done strong { color: #166534; text-decoration: line-through; text-decoration-thickness: 1px; }
 .roadmap-tag { display: inline-block; margin-top: 6px; padding: 2px 9px; border-radius: 999px; background: #fff3b0; color: #6b4e00; font-size: .78rem; font-weight: 800; }
+
+/* ── Brand logo ── */
+.brand-logo { display: block; width: min(68vw, 300px); height: auto; margin: 0 auto; }
+.brand-logo-pulse { width: min(50vw, 200px); animation: logo-pulse 1.6s ease-in-out infinite; }
+@keyframes logo-pulse { 50% { opacity: .55; transform: scale(.97); } }
+@media (prefers-reduced-motion: reduce) { .brand-logo-pulse { animation: none; } }
+.topbar-title { display: inline-flex; align-items: center; gap: 10px; text-align: center; }
+.topbar-logo { width: 34px; height: 34px; object-fit: contain; flex: none; }
+@media (max-width: 380px) { .topbar-logo { width: 26px; height: 26px; } }
