@@ -1,0 +1,45 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isMe(uid) { return signedIn() && request.auth.uid == uid; }
+
+    // Private user data – only the owner. Role can't be changed after signup.
+    match /users/{uid} {
+      allow read: if isMe(uid);
+      allow create: if isMe(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.role in ['entrepreneur', 'mentor', 'learner'];
+      allow update: if isMe(uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.role == resource.data.role;
+      allow delete: if false;
+    }
+
+    // Public mentor cards. A mentor can only ever set herself to "pending";
+    // "approved"/"rejected" is set by an admin in the Firebase console.
+    match /mentors/{uid} {
+      allow read: if isMe(uid) || (signedIn() && resource.data.verificationStatus == 'approved');
+      allow create, update: if isMe(uid)
+        && get(/databases/$(database)/documents/users/$(uid)).data.role == 'mentor'
+        && request.resource.data.uid == uid
+        && request.resource.data.verificationStatus == 'pending';
+      allow delete: if false;
+    }
+
+    // Session requests between an entrepreneur and an approved mentor.
+    match /requests/{id} {
+      allow read: if signedIn()
+        && (resource.data.entrepreneurId == request.auth.uid || resource.data.mentorId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.entrepreneurId == request.auth.uid
+        && request.resource.data.status == 'requested'
+        && get(/databases/$(database)/documents/mentors/$(request.resource.data.mentorId)).data.verificationStatus == 'approved';
+      allow update: if signedIn()
+        && resource.data.mentorId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'respondedAt'])
+        && request.resource.data.status in ['accepted', 'declined'];
+      allow delete: if false;
+    }
+  }
+}
